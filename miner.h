@@ -1,5 +1,5 @@
 
-typedef enum FIELDS { zero = 0, one, two, three, four, five, six, seven, eight, mine, unknown, none} fields;
+typedef enum FIELDS { zero = 0, one, two, three, four, five, six, seven, eight, unknown, none, mine} fields;
 
 typedef struct {
 	int *matrix; // NxM map
@@ -13,10 +13,21 @@ typedef struct {
 
 int flat(board *b, int row, int col);
 void dim(board *b, int index, int *row, int *col);
+
+int field(board *b, int index);
+void window(int *window, board *b, int index);
+void print_window(int *window);
+
 int up(board *b, int index);
 int down(board *b, int index);
+
 int left(board *b, int index);
+int left_up(board *b, int index);
+int left_down(board *b, int index);
+
 int right(board *b, int index);
+int right_up(board *b, int index);
+int right_down(board *b, int index);
 
 int uncover(board *b, int row, int col);
 

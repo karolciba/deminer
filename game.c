@@ -8,7 +8,7 @@ int main(int argc, char ** argv) {
 	/* board *b = init_board(16,16,40); */
 	/* board *b = init_board(30,16,99); */
 
-	board *b = init_board(16,16,10);
+	board *b = init_board(16,16,40);
 	int row, col, ret;
 	while (1) {
 		print_board(b, 0);
