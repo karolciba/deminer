@@ -66,9 +66,9 @@ int fd;
  * in structure.
  */
 typedef struct {
-	int mines;
-	int tries;
-	int score; /* probability of mine scaled to UINT_MAX */
+	unsigned int mines;
+	unsigned int tries;
+	unsigned int score; /* probability of mine scaled to UINT_MAX */
 } state_p;
 
 /*
@@ -273,7 +273,7 @@ void update(int *window, int mine) {
 			db[code].mines++;
 		}
 		db[code].tries++;
-		db[code].score = ( (float) db[code].mines * UINT_MAX ) / (float)db[code].tries;
+		db[code].score = ( (unsigned long) db[code].mines * UINT_MAX ) / (unsigned long)db[code].tries;
 		pthread_mutex_unlock(&lock);
 	}
 }
@@ -412,9 +412,9 @@ int main(int argc, char **argv) {
 		int * w = alloca(9 * sizeof(int));
 		for (int i = 0; i < COMBINATIONS; i++) {
 			if (db[i].mines > 1 && db[i].tries > 2) {
-				unhash(w, 2*i);
+				unhash(w, i);
 				print_window(w);
-				printf("Index %#x %d/%d = %d\n", i,db[i].mines,db[i].tries, db[i].score);
+				printf("Index %#x %d/%d = %u %f\n", i,db[i].mines,db[i].tries, db[i].score, (float)db[i].score/UINT_MAX);
 			}
 				
 		}
