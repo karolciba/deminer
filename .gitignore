@@ -33,6 +33,7 @@
 
 # Coredumps
 core
+callgrind.out.*
 
 # Solvers databases
 *.db

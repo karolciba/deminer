@@ -141,6 +141,28 @@ void unhash(int *window, int code) {
 	window[4] = unknown;
 }
 
+inline int window(int *window, board *b, int index) {
+	int i0, i1, i2, i3, i5, i6, i7, i8 ;
+	i0 = left_up(b, index);
+	window[0] = field(b, i0);
+	i1 = up(b, index);
+	window[1] = field(b, i1);
+	i2 = right_up(b, index);
+	window[2] = field(b, i2);
+	i3 = left(b, index);
+	window[3] = field(b, i3);
+	// i4 = index;
+	window[4] = field(b, index);
+	i5 = right(b, index);
+	window[5] = field(b, i5);
+	i6 = left_down(b, index);
+	window[6] = field(b, i6);
+	i7 = down(b, index);
+	window[7] = field(b, i7);
+	i8 = right_down(b, index);
+	window[8] = field(b, i8);
+}
+
 /* 
  * Open database (creates if not available)
  * and set global pointer for database.
@@ -384,6 +406,7 @@ int main(int argc, char **argv) {
 		printf("Usage:\n");
 		printf("play single simulation: %s p\n", argv[0]);
 		printf("train: %s t NUMBER_OF_SIMULATIONS\n", argv[0]);
+		printf("one thread train: %s o NUMBER_OF_SIMULATIONS\n", argv[0]);
 		printf("inspect db: %s d\n", argv[0]);
 		exit(1);
 	}
@@ -414,6 +437,21 @@ int main(int argc, char **argv) {
 		for (int i = 0; i < THREADS; i++) {
 			pthread_join( threads[i], NULL);
 		}
+	}
+
+	if (strcmp(argv[1], "o") == 0) {
+		int plays = atoi(argv[2]);
+		int wins = 0;
+		for (int i = 0; i < plays; i++) {
+			if (i%1000 == 0) {
+				printf("\rTrain %d", i);
+				fflush(stdout);
+			}
+			if (train(ROWS,COLS,MINES) == 1)
+				wins++;
+		}
+
+		printf("\nAfter %d was %d wins\n", plays, wins);
 	}
 
 	if (strcmp(argv[1], "p") == 0) {

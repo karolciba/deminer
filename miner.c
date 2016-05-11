@@ -5,98 +5,13 @@
 #include "miner.h"
 
 
-int flat(board *b, int row, int col) {
-	return b->cols*row+col;
-}
-
-int up(board *b, int index) {
-	return index - b->cols;
-}
-int down(board *b, int index) {
-	int i = index + (b->cols);
-	if (i < b->size)
-		return i;
-	else
-		return -1;
-}
-int left(board *b, int index) {
-	if (0 == index % (b->cols))
-		return -1;
-	else
-		return  index - 1;
-}
-int right(board *b, int index) {
-	if (0 == (index + 1) % (b->cols))
-		return -1;
-	else
-		return index + 1;
-}
-int left_up(board *b, int index) {
-	int i = left(b, index);
-	if (i > 0)
-		return up(b, i);
-	else
-		return -1;
-}
-int left_down(board *b, int index) {
-	int i = left(b, index);
-	if (i > 0)
-		return down(b, i);
-	else
-		return -1;
-}
-int right_up(board *b, int index) {
-	int i = right(b, index);
-	if (i > 0)
-		return up(b, i);
-	else
-		return -1;
-}
-int right_down(board *b, int index) {
-	int i = right(b, index);
-	if (i > 0)
-		return down(b, i);
-	else
-		return -1;
-}
 
 void dim(board *b, int index, int * row, int *col) {
 	*row = index / (b->cols);
 	*col = index % (b->cols);
 }
 
-int field(board *b, int index) {
-	if (index < 0) {
-		return none;
-	}
-	if (b->visible[index] == 0) {
-		return unknown;
-	}
-	
-	return (b->matrix[index]);
-}
 
-void window(int *window, board *b, int index) {
-	int i0, i1, i2, i3, i5, i6, i7, i8 ;
-	i0 = left_up(b, index);
-	window[0] = field(b, i0);
-	i1 = up(b, index);
-	window[1] = field(b, i1);
-	i2 = right_up(b, index);
-	window[2] = field(b, i2);
-	i3 = left(b, index);
-	window[3] = field(b, i3);
-	// i4 = index;
-	window[4] = field(b, index);
-	i5 = right(b, index);
-	window[5] = field(b, i5);
-	i6 = left_down(b, index);
-	window[6] = field(b, i6);
-	i7 = down(b, index);
-	window[7] = field(b, i7);
-	i8 = right_down(b, index);
-	window[8] = field(b, i8);
-}
 
 void print_field(int field) {
 	switch(field) {

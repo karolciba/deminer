@@ -1,4 +1,4 @@
-CFLAGS=-std=c99 -ggdb -lpthread
+CFLAGS=-std=c99 -ggdb -lpthread -O3
 LDFLAGS=-pthread
 
 test_miner: test_miner.o miner.o
