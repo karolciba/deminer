@@ -61,16 +61,6 @@ int per_thread = 0;
 int fd;
 
 /*
- * Global pointer to mmaped database file
- */
-unsigned int *db;
-
-/*
- * Mutex for concurrent accessing database
- */
-pthread_mutex_t lock;
-
-/*
  * Structure for state probability
  * TODO: Real probability to calcuated in real time vs. storing rescaled score
  * in structure.
@@ -78,8 +68,18 @@ pthread_mutex_t lock;
 typedef struct {
 	int mines;
 	int tries;
+	int score; /* probability of mine scaled to UINT_MAX */
 } state_p;
 
+/*
+ * Global pointer to mmaped database file
+ */
+state_p *db;
+
+/*
+ * Mutex for concurrent accessing database
+ */
+pthread_mutex_t lock;
 
 /* 
  * Assumes 3by3 window, middle element is always unknown
@@ -107,9 +107,6 @@ int hash(int *window) {
 	code = code * 11 + window[7];
 	code = code * 11 + window[8];
 
-	/* TODO: refactor to use struct and indexing it not ints */
-	code *= 2;
-
 	return code;
 }
 
@@ -119,9 +116,6 @@ int hash(int *window) {
  * inspect database.
  */
 void unhash(int *window, int code) {
-	/* TODO: refactor to use struct and indexing it not ints */
-	code /= 2;
-
 	window[8] = code % 11;
 	code /= 11;
 	window[7] = code % 11;
@@ -169,9 +163,9 @@ inline int window(int *window, board *b, int index) {
  */
 void init_db() {
 	int new_db = 0;
-	int size = 0;
+	unsigned int size = 0;
 	int result;
-	size = COMBINATIONS * sizeof(unsigned int) * 2;
+	size = COMBINATIONS * sizeof(state_p);
 	
 	if( access( DB_FILE, F_OK ) != -1 ) {
 		fd = open(DB_FILE, O_RDWR, (mode_t)0600);
@@ -195,7 +189,7 @@ void init_db() {
 
 	// if size different that expected reset db
 	if (statbuf.st_size != size) {
-		printf("DB_FILE corrupted size %li expected %i\n", statbuf.st_size, size);
+		printf("DB_FILE corrupted size %li expected %u\n", statbuf.st_size, size);
 		new_db = 1;
 	}
 
@@ -239,8 +233,7 @@ void init_db() {
 	if (new_db) {
 		printf("DB was currupted, resseting state\n");
 		for (unsigned int i = 0; i < COMBINATIONS; i++) {
-			db[2*i] = 1;
-			db[2*i + 1] = 2;
+			db[i] = (state_p){ 1, 2, UINT_MAX/2 };
 		}
 	}
 
@@ -251,7 +244,7 @@ void init_db() {
  * Close database file, sync and un-map memory file.
  */
 void close_db() {
-	int size = COMBINATIONS * sizeof(unsigned int) * 2;
+	int size = COMBINATIONS * sizeof(state_p);
 	msync(db, size, MS_SYNC | MS_INVALIDATE);
 	munmap(db, size);
 	close(fd);
@@ -262,9 +255,10 @@ void close_db() {
  */
 unsigned int check(int *window) {
 	int code = hash(window);
-	unsigned int mines = db[code];
-	unsigned int tries = db[code+1];
-	return ( (float) mines * UINT_MAX ) / (float) tries;
+	return db[code].score;
+	/* unsigned int mines = db[code]; */
+	/* unsigned int tries = db[code+1]; */
+	/* return ( (float) mines * UINT_MAX ) / (float) tries; */
 }
 
 /*
@@ -273,12 +267,13 @@ unsigned int check(int *window) {
 void update(int *window, int mine) {
 	int code = hash(window);
 
-	if (db[code] < UINT_MAX && db[code+1] < UINT_MAX) {
+	if (db[code].mines < UINT_MAX && db[code].tries < UINT_MAX) {
 		pthread_mutex_lock(&lock);
 		if (mine) {
-			db[code]++;
+			db[code].mines++;
 		}
-		db[code+1]++;
+		db[code].tries++;
+		db[code].score = ( (float) db[code].mines * UINT_MAX ) / (float)db[code].tries;
 		pthread_mutex_unlock(&lock);
 	}
 }
@@ -416,10 +411,10 @@ int main(int argc, char **argv) {
 	if (strcmp(argv[1], "d") == 0) {
 		int * w = alloca(9 * sizeof(int));
 		for (int i = 0; i < COMBINATIONS; i++) {
-			if (db[2*i] > 99 && db[2*i+1] > 100) {
+			if (db[i].mines > 1 && db[i].tries > 2) {
 				unhash(w, 2*i);
 				print_window(w);
-				printf("Index %#x %d/%d = %f\n", i,db[2*i],db[2*i+1], (float)db[2*i]/(float)db[2*i+1]);
+				printf("Index %#x %d/%d = %d\n", i,db[i].mines,db[i].tries, db[i].score);
 			}
 				
 		}
