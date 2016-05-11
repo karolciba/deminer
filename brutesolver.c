@@ -217,8 +217,8 @@ void init_db() {
 	if (new_db) {
 		printf("DB was currupted, resseting state\n");
 		for (unsigned int i = 0; i < COMBINATIONS; i++) {
-			db[2*i] = 0;
-			db[2*i + 1] = 1;
+			db[2*i] = 1;
+			db[2*i + 1] = 2;
 		}
 	}
 
