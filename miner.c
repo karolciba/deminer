@@ -66,10 +66,12 @@ void dim(board *b, int index, int * row, int *col) {
 }
 
 int field(board *b, int index) {
-	if (index < 0)
+	if (index < 0) {
 		return none;
-	if (b->visible == 0);
+	}
+	if (b->visible[index] == 0) {
 		return unknown;
+	}
 	
 	return (b->matrix[index]);
 }
@@ -128,6 +130,12 @@ void print_field(int field) {
 		case mine:
 			putchar('*');
 			break;
+		case unknown:
+			putchar('#');
+			break;
+		case none:
+			putchar('_');
+			break;
 		default:
 			putchar('?');
 	}
@@ -168,7 +176,7 @@ board *init_board(int rows, int cols, int mines) {
 
 	// randomely distribute mines
 	int size = rows*cols;
-	int * stack = malloc(rows*cols*sizeof(int));
+	int * stack = malloc(10000*rows*cols*sizeof(int));
 	// initialize stack with tiles numbers
 	for (int i = 0; i < size; i++) {
 		stack[i] = i;
@@ -187,25 +195,49 @@ board *init_board(int rows, int cols, int mines) {
 		new_board->matrix[index] = mine;
 		int upi = up(new_board, index);
 		if (upi >= 0) {
-			if (new_board->matrix[upi] <= eight) {
+			if (new_board->matrix[upi] <= seven) {
 				new_board->matrix[upi]++;
+			}
+		}
+		int leftupi = left_up(new_board, index);
+		if (leftupi >= 0) {
+			if (new_board->matrix[leftupi] <= seven) {
+				new_board->matrix[leftupi]++;
+			}
+		}
+		int rightupi = right_up(new_board, index);
+		if (rightupi >= 0) {
+			if (new_board->matrix[rightupi] <= seven) {
+				new_board->matrix[rightupi]++;
 			}
 		}
 		int downi = down(new_board, index);
 		if (downi >= 0) {
-			if (new_board->matrix[downi] <= eight) {
+			if (new_board->matrix[downi] <= seven) {
 				new_board->matrix[downi]++;
+			}
+		}
+		int leftdowni = left_down(new_board, index);
+		if (leftdowni >= 0) {
+			if (new_board->matrix[leftdowni] <= seven) {
+				new_board->matrix[leftdowni]++;
+			}
+		}
+		int rightdowni = right_down(new_board, index);
+		if (rightdowni >= 0) {
+			if (new_board->matrix[rightdowni] <= seven) {
+				new_board->matrix[rightdowni]++;
 			}
 		}
 		int lefti = left(new_board, index);
 		if (lefti >= 0) {
-			if (new_board->matrix[lefti] <= eight) {
+			if (new_board->matrix[lefti] <= seven) {
 				new_board->matrix[lefti]++;
 			}
 		}
 		int righti = right(new_board, index);
 		if (righti >= 0) {
-			if (new_board->matrix[righti] <= eight) {
+			if (new_board->matrix[righti] <= seven) {
 				new_board->matrix[righti]++;
 			}
 		}
@@ -232,7 +264,7 @@ int uncover(board *b, int row, int col) {
 	if (b->matrix[index] <= eight) {
 		// TODO: fix to big stack - check stack before putting new
 		int *stack = calloc(1*b->size, sizeof(int));
-		int top=0, i, upi, downi, lefti, righti;
+		int top=0, i, upi, leftupi, rightupi, downi, leftdowni, rightdowni, lefti, righti;
 		stack[top++] = index;
 		while (top > 0) {
 			i = stack[--top];
@@ -245,9 +277,21 @@ int uncover(board *b, int row, int col) {
 				upi = up(b, i);
 				if (upi >= 0 && b->visible[upi]==0)// && b->matrix[upi] == zero)
 					stack[top++] = upi;
+				/* leftupi = left_up(b, i); */
+				/* if (leftupi >= 0 && b->visible[leftupi]==0)// && b->matrix[leftupi] == zero) */
+				/* 	stack[top++] = leftupi; */
+				/* rightupi = right_up(b, i); */
+				/* if (rightupi >= 0 && b->visible[rightupi]==0)// && b->matrix[rightupi] == zero) */
+				/* 	stack[top++] = rightupi; */
 				downi = down(b, i);
 				if (downi >= 0 && b->visible[downi]==0) // && b->matrix[downi] == zero)
 					stack[top++] = downi;
+				/* leftdowni = left_down(b, i); */
+				/* if (leftdowni >= 0 && b->visible[leftdowni]==0) // && b->matrix[leftdowni] == zero) */
+				/* 	stack[top++] = leftdowni; */
+				/* rightdowni = right_down(b, i); */
+				/* if (rightdowni >= 0 && b->visible[rightdowni]==0) // && b->matrix[rightdowni] == zero) */
+				/* 	stack[top++] = rightdowni; */
 				lefti = left(b, i);
 				if (lefti >= 0 && b->visible[lefti]==0) // && b->matrix[lefti] == zero)
 					stack[top++] = lefti;
@@ -287,7 +331,7 @@ void print_board(board *b, int debug) {
 			printf("\n%d|", ((i+1)/(b->cols))%10 );
 		}
 
-		if (b->visible[i] == 0) {
+		if (debug == 0 && b->visible[i] == 0) {
 			putchar('#');
 			continue;
 		}

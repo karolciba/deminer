@@ -1,4 +1,3 @@
-#include "miner.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -8,34 +7,95 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <alloca.h>
+#include <pthread.h>
 
-// 11**8
+#include "miner.h"
+
+/*
+ * 3 by 3 window,
+ * each field in possible state:
+ * 0,1,2,3,4,5,6,7,8,UNKNOWN,NONE
+ * where:
+ * UNKNOWN - field yet uncovered
+ * NONE - field outside board (corner, side)
+ * eg.
+ *
+ *  ___
+ *  _#1
+ *  _12
+ *
+ * center field is always unknown and under consideration
+ * that meand there are 11(states)**8(filed) possible states
+ */
 #define COMBINATIONS  214358881
-// assuming 4bits per field, and actual 11 combination for last one
-// two bytes for nominator, two bytes for denominator
-// #define DB_SIZE 11811160064LL
-#define DB_SIZE 857435524
+/*
+ * Database will contain COMBINATIONS * sizeof(state_p)
+ * COUNT should be at least 4 bytes int. As short type will give
+ * only 65535 tries, which is very small number in comparison to
+ * possible combination and needed tries to get fair estimation
+ * of probability of mine in given combination.
+ */
 #define DB_FILE "brutesolver.db"
 
+/*
+ * Expert setting in Microsoft minesweeper
+ */
+#define ROWS 16
+#define COLS 16
+#define MINES 40
+
+/*
+ * Let's use those contemporary multicore processors. Calculation
+ * bilions of combinations takes days.
+ */
+#define THREADS 8
+/*
+ * Global to pass information how many simulation each thread should
+ * calculate
+ */
+int per_thread = 0;
+
+/*
+ * Global file descriptor for database file
+ */
 int fd;
+
+/*
+ * Global pointer to mmaped database file
+ */
 unsigned int *db;
 
+/*
+ * Mutex for concurrent accessing database
+ */
+pthread_mutex_t lock;
 
-/* Assumes 3by3 window, middle element is always unknown
+/*
+ * Structure for state probability
+ * TODO: Real probability to calcuated in real time vs. storing rescaled score
+ * in structure.
+ */
+typedef struct {
+	int mines;
+	int tries;
+} state_p;
+
+
+/* 
+ * Assumes 3by3 window, middle element is always unknown
  * will have much empty space, as there are only 11 posible
- * states for field, and it's using 4 bits to encode each
+ * states for field, and it's using 4 bits to encode each.
+ *
+ * Faster approach could be using 4 bites per field, full state
+ * would have 32 bit hash, occupying whole int.
+ * This would give faster hash calcuation (only bit shifting:
+ * code<<4
+ * code&=window[i]
+ * ) however in expense for bigger (mostly empty) database file.
+ * 12 GB instead of 1.6 GB
  */
 int hash(int *window) {
 	int code = 0;
-	/* code += 0x000000001 * window[0]; */
-	/* code += 0x000000010 * window[1]; */
-	/* code += 0x000000100 * window[2]; */
-	/* code += 0x000001000 * window[3]; */
-	/* #<{(| code += 0x10000 * window[4]; |)}># */
-	/* code += 0x000010000 * window[5]; */
-	/* code += 0x000100000 * window[6]; */
-	/* code += 0x001000000 * window[7]; */
-	/* code += 0x010000000 * window[8]; */
 
 	code = window[0];
 	code = code * 11 + window[1];
@@ -47,13 +107,43 @@ int hash(int *window) {
 	code = code * 11 + window[7];
 	code = code * 11 + window[8];
 
+	/* TODO: refactor to use struct and indexing it not ints */
 	code *= 2;
 
 	return code;
 }
 
-/* Open database (creates if not available)
- * and returns pointer to is
+/*
+ * This hash is one to one relation, we can unwind hash to
+ * see what window it is calculated for. Can be used to
+ * inspect database.
+ */
+void unhash(int *window, int code) {
+	/* TODO: refactor to use struct and indexing it not ints */
+	code /= 2;
+
+	window[8] = code % 11;
+	code /= 11;
+	window[7] = code % 11;
+	code /= 11;
+	window[6] = code % 11;
+	code /= 11;
+	window[5] = code % 11;
+	code /= 11;
+	window[3] = code % 11;
+	code /= 11;
+	window[2] = code % 11;
+	code /= 11;
+	window[1] = code % 11;
+	code /= 11;
+	window[0] = code;
+
+	window[4] = unknown;
+}
+
+/* 
+ * Open database (creates if not available)
+ * and set global pointer for database.
  */
 void init_db() {
 	int new_db = 0;
@@ -135,14 +225,19 @@ void init_db() {
 	/* msync(db, size, MS_SYNC | MS_INVALIDATE); */
 }
 
+/*
+ * Close database file, sync and un-map memory file.
+ */
 void close_db() {
 	int size = COMBINATIONS * sizeof(unsigned int) * 2;
-	/* msync(db, size, MS_SYNC | MS_INVALIDATE); */
+	msync(db, size, MS_SYNC | MS_INVALIDATE);
 	munmap(db, size);
 	close(fd);
 }
 
-/* Checks probability of mine for given configuration */
+/* 
+ * Checks probability of mine for given configuration
+ */
 unsigned int check(int *window) {
 	int code = hash(window);
 	unsigned int mines = db[code];
@@ -150,17 +245,27 @@ unsigned int check(int *window) {
 	return ( (float) mines * UINT_MAX ) / (float) tries;
 }
 
-/* Updates probabilites for given configuration */
+/*
+ * Updates probabilites for given configuration
+ */
 void update(int *window, int mine) {
 	int code = hash(window);
+
 	if (db[code] < UINT_MAX && db[code+1] < UINT_MAX) {
-		if (mine)
+		pthread_mutex_lock(&lock);
+		if (mine) {
 			db[code]++;
+		}
 		db[code+1]++;
+		pthread_mutex_unlock(&lock);
 	}
 }
 
-
+/*
+ * Train data model.
+ * Prepare simulation of game using current model database
+ * update probabilities along way.
+ */
 int train(int rows, int cols, int mines) {
 	board *b = init_board(rows,cols,mines);
 
@@ -204,6 +309,10 @@ int train(int rows, int cols, int mines) {
 	return ret;
 }
 
+/*
+ * Play game using current database,
+ * do not update probabilities
+ */
 int play(int rows, int cols, int mines) {
 	board *b = init_board(rows,cols,mines);
 
@@ -232,7 +341,7 @@ int play(int rows, int cols, int mines) {
 		
 		window(w, b, minimal_i);
 		ret = uncover(b, minimal_i, -1);
-		print_board(b,1);
+		print_board(b,0);
 
 		if (ret == -1) {
 			/* update(w, 1); */
@@ -248,41 +357,72 @@ int play(int rows, int cols, int mines) {
 	return ret;
 }
 
+/*
+ * Worker thread for solving simulation in parallel
+ */
+void *solver_thread(void *ignore) {
+	pthread_t self;
+	self = pthread_self();
+
+	int plays = per_thread;
+	int wins = 0;
+	for (int i = 0; i < plays; i++) {
+		if (i%1000 == 0) {
+			printf("\r%p Train %d", (void *)self, i);
+			fflush(stdout);
+		}
+		if (train(ROWS,COLS,MINES) == 1)
+			wins++;
+	}
+
+	printf("\nAfter %d was %d wins\n", plays, wins);
+	return NULL;
+}
+
 int main(int argc, char **argv) {
 	if (argc < 2) {
-		printf("Usage: %s p|d|t NO_OF_PLAYS\n",argv[0]);
+		printf("Usage:\n");
+		printf("play single simulation: %s p\n", argv[0]);
+		printf("train: %s t NUMBER_OF_SIMULATIONS\n", argv[0]);
+		printf("inspect db: %s d\n", argv[0]);
 		exit(1);
 	}
 
 	init_db();
 
-	printf("Command: %s %s\n",argv[0], argv[1]);
 	if (strcmp(argv[1], "d") == 0) {
+		int * w = alloca(9 * sizeof(int));
 		for (int i = 0; i < COMBINATIONS; i++) {
-			if (db[2*i] != 0 || db[2*i+1] > 1) {
-				printf("Index %#x %d/%d\n", i,db[2*i],db[2*i+1]);
+			if (db[2*i] > 99 && db[2*i+1] > 100) {
+				unhash(w, 2*i);
+				print_window(w);
+				printf("Index %#x %d/%d = %f\n", i,db[2*i],db[2*i+1], (float)db[2*i]/(float)db[2*i+1]);
 			}
 				
 		}
 		exit(0);
 	}
 
+	pthread_t *threads = alloca(THREADS * sizeof(pthread_t));
 	if (strcmp(argv[1], "t") == 0) {
 		int plays = atoi(argv[2]);
-		int wins = 0;
-		for (int i = 0; i < plays; i++) {
-			if (i%1000 == 0) {
-				printf("\rTrain %d", i);
-				fflush(stdout);
-			}
-			if (train(16,16,40) == 1)
-				wins++;
+		per_thread = plays/THREADS;
+		// thread_create
+		for (int i = 0; i < THREADS; i++) {
+			pthread_create( &threads[i], NULL, solver_thread, (void*) NULL);
 		}
-		printf("\nAfter %d was %d wins\n", plays, wins);
+		for (int i = 0; i < THREADS; i++) {
+			pthread_join( threads[i], NULL);
+		}
 	}
 
 	if (strcmp(argv[1], "p") == 0) {
-		play(16,16,40);
+		int ret;
+		ret = play(ROWS,COLS,MINES);
+		if (ret == 1)
+			printf("You won!\n");
+		else
+			printf("You lost!\n");
 	}
 
 	close_db();

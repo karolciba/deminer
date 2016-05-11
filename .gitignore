@@ -33,3 +33,11 @@
 
 # Coredumps
 core
+
+# Solvers databases
+*.db
+
+# Executables
+game
+brutesolver
+test_miner
