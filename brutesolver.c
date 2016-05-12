@@ -48,7 +48,7 @@
  * Let's use those contemporary multicore processors. Calculation
  * bilions of combinations takes days.
  */
-#define THREADS 8
+#define THREADS 3
 /*
  * Global to pass information how many simulation each thread should
  * calculate
@@ -438,14 +438,13 @@ int play(int rows, int cols, int mines) {
  * Worker thread for solving simulation in parallel
  */
 void *solver_thread(void *ignore) {
-	pthread_t self;
-	self = pthread_self();
+	long thread_id = (long int)ignore;
 
 	unsigned long plays = per_thread;
 	int wins = 0;
 	for (int i = 0; i < plays; i++) {
 		if (i%1000 == 0) {
-			printf("\r%p Train %d", (void *)self, i);
+			printf("\r%li Train %d", thread_id, i);
 			fflush(stdout);
 		}
 		if (train(ROWS,COLS,MINES) == 1)
@@ -462,14 +461,13 @@ void *solver_thread(void *ignore) {
  * to avoid bias from low tries.
  */
 void *random_solver_thread(void *ignore) {
-	pthread_t self;
-	self = pthread_self();
+	long thread_id = (long)ignore;
 
 	unsigned long plays = per_thread;
 	int wins = 0;
 	for (int i = 0; i < plays; i++) {
 		if (i%1000 == 0) {
-			printf("\r%p Train %d", (void *)self, i);
+			printf("\r%li Train %d", thread_id, i);
 			fflush(stdout);
 		}
 		if (random_train(ROWS,COLS,MINES) == 1)
@@ -512,8 +510,8 @@ int main(int argc, char **argv) {
 		unsigned long plays = atol(argv[2]);
 		per_thread = plays/THREADS;
 		// thread_create
-		for (int i = 0; i < THREADS; i++) {
-			pthread_create( &threads[i], NULL, solver_thread, (void*) NULL);
+		for (long i = 0; i < THREADS; i++) {
+			pthread_create( &threads[i], NULL, solver_thread, (void*) i);
 		}
 		for (int i = 0; i < THREADS; i++) {
 			pthread_join( threads[i], NULL);
@@ -524,8 +522,8 @@ int main(int argc, char **argv) {
 		unsigned long plays = atol(argv[2]);
 		per_thread = plays/THREADS;
 		// thread_create
-		for (int i = 0; i < THREADS; i++) {
-			pthread_create( &threads[i], NULL, random_solver_thread, (void*) NULL);
+		for (long i = 0; i < THREADS; i++) {
+			pthread_create( &threads[i], NULL, random_solver_thread, (void*) i);
 		}
 		for (int i = 0; i < THREADS; i++) {
 			pthread_join( threads[i], NULL);
