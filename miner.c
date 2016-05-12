@@ -2,9 +2,8 @@
 #include <time.h>
 #include <stdlib.h>
 #include <alloca.h>
+
 #include "miner.h"
-
-
 
 void dim(board *b, int index, int * row, int *col) {
 	*row = index / (b->cols);

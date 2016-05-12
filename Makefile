@@ -1,5 +1,5 @@
-CFLAGS=-std=c99 -g -lpthread -O3
-LDFLAGS=-pthread
+CFLAGS += -std=c99 -g -lpthread
+LDFLAGS += -pthread
 
 test_miner: test_miner.o miner.o
 

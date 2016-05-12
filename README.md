@@ -5,8 +5,22 @@ AI used to solve Minesweeper
 
 ## Window 3x3
 
-## Can we do better? No!
+## Succes rate - wins or moves?
 
-# Bigger probabilistic graph moded
+## Local minima
+### Randomize training
+### Favor low tried states
 
-# Neural Networks
+## Validate randomizer
+
+## Monty's Hall Paradox
+
+## Can we do better? A bit!
+
+### Multipass brutesolver
+
+# Bigger probabilistic graph model
+
+# Neural Networks?
+
+# Genetic Programing?

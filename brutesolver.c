@@ -53,7 +53,7 @@
  * Global to pass information how many simulation each thread should
  * calculate
  */
-int per_thread = 0;
+unsigned long per_thread = 0;
 
 /*
  * Global file descriptor for database file
@@ -94,8 +94,8 @@ pthread_mutex_t lock;
  * ) however in expense for bigger (mostly empty) database file.
  * 12 GB instead of 1.6 GB
  */
-int hash(int *window) {
-	int code = 0;
+unsigned int hash(int *window) {
+	unsigned int code = 0;
 
 	code = window[0];
 	code = code * 11 + window[1];
@@ -115,7 +115,7 @@ int hash(int *window) {
  * see what window it is calculated for. Can be used to
  * inspect database.
  */
-void unhash(int *window, int code) {
+void unhash(int *window, unsigned int code) {
 	window[8] = code % 11;
 	code /= 11;
 	window[7] = code % 11;
@@ -135,7 +135,7 @@ void unhash(int *window, int code) {
 	window[4] = unknown;
 }
 
-inline int window(int *window, board *b, int index) {
+static inline void window(int *window, board *b, int index) {
 	int i0, i1, i2, i3, i5, i6, i7, i8 ;
 	i0 = left_up(b, index);
 	window[0] = field(b, i0);
@@ -230,6 +230,12 @@ void init_db() {
 	}
 
 
+	/*
+	 * Initial state smoothed
+	 * assuming there was one try for each possibility
+	 * mines: 1, tries: 2
+	 * precalculate score to be 50%
+	 */
 	if (new_db) {
 		printf("DB was currupted, resseting state\n");
 		for (unsigned int i = 0; i < COMBINATIONS; i++) {
@@ -254,7 +260,7 @@ void close_db() {
  * Checks probability of mine for given configuration
  */
 unsigned int check(int *window) {
-	int code = hash(window);
+	unsigned int code = hash(window);
 	return db[code].score;
 	/* unsigned int mines = db[code]; */
 	/* unsigned int tries = db[code+1]; */
@@ -265,7 +271,7 @@ unsigned int check(int *window) {
  * Updates probabilites for given configuration
  */
 void update(int *window, int mine) {
-	int code = hash(window);
+	unsigned int code = hash(window);
 
 	if (db[code].mines < UINT_MAX && db[code].tries < UINT_MAX) {
 		pthread_mutex_lock(&lock);
@@ -327,6 +333,60 @@ int train(int rows, int cols, int mines) {
 }
 
 /*
+ * Train data model.
+ * Prepare simulation of game using current model database
+ * update probabilities along way.
+ */
+int random_train(int rows, int cols, int mines) {
+	board *b = init_board(rows,cols,mines);
+
+	/* int *probmap; */
+       	/* probmap = malloc(rows*cols,*sizeof(int)); */
+
+	int ret = 0;
+	int *w = alloca(9 * sizeof(int));
+
+	/*
+	 * Using this big alloca in threads gives
+	 * nasty segfaults
+	 */
+	int *fields = malloc(b->size*sizeof(int)+1);
+	if (!fields) {
+		perror("Can't create stack");
+	}
+	int top = 0;
+
+	while (1) {
+		top = 0;
+		for (int i = 0; i < b->size; i++) {
+			if (b->visible[i] == 1)
+				continue;
+			fields[top++] = i;
+		}
+
+		/* randomly select index from available stack */
+		int i = rand()%(top+1);
+		int index = fields[i];
+		
+		window(w, b, index);
+		ret = uncover(b, index, -1);
+
+		if (ret == -1) {
+			update(w, 1);
+		}
+		if (ret == 0) {
+			update(w, 0);
+		}
+
+		if (ret != 0) break;
+	}
+
+	free(fields);
+	destroy_board(b);
+	return ret;
+}
+
+/*
  * Play game using current database,
  * do not update probabilities
  */
@@ -381,7 +441,7 @@ void *solver_thread(void *ignore) {
 	pthread_t self;
 	self = pthread_self();
 
-	int plays = per_thread;
+	unsigned long plays = per_thread;
 	int wins = 0;
 	for (int i = 0; i < plays; i++) {
 		if (i%1000 == 0) {
@@ -392,7 +452,31 @@ void *solver_thread(void *ignore) {
 			wins++;
 	}
 
-	printf("\nAfter %d was %d wins\n", plays, wins);
+	printf("\nAfter %li was %d wins\n", plays, wins);
+	return NULL;
+}
+
+/*
+ * Worker thread for solving simulation in parallel,
+ * using random selection of fields to be uncovered
+ * to avoid bias from low tries.
+ */
+void *random_solver_thread(void *ignore) {
+	pthread_t self;
+	self = pthread_self();
+
+	unsigned long plays = per_thread;
+	int wins = 0;
+	for (int i = 0; i < plays; i++) {
+		if (i%1000 == 0) {
+			printf("\r%p Train %d", (void *)self, i);
+			fflush(stdout);
+		}
+		if (random_train(ROWS,COLS,MINES) == 1)
+			wins++;
+	}
+
+	printf("\nAfter %li was %d wins\n", plays, wins);
 	return NULL;
 }
 
@@ -401,7 +485,9 @@ int main(int argc, char **argv) {
 		printf("Usage:\n");
 		printf("play single simulation: %s p\n", argv[0]);
 		printf("train: %s t NUMBER_OF_SIMULATIONS\n", argv[0]);
-		printf("one thread train: %s o NUMBER_OF_SIMULATIONS\n", argv[0]);
+		printf("one thread train: %s st NUMBER_OF_SIMULATIONS\n", argv[0]);
+		printf("random train: %s r NUMBER_OF_SIMULATIONS\n", argv[0]);
+		printf("one thread random train: %s sr NUMBER_OF_SIMULATIONS\n", argv[0]);
 		printf("inspect db: %s d\n", argv[0]);
 		exit(1);
 	}
@@ -423,7 +509,7 @@ int main(int argc, char **argv) {
 
 	pthread_t *threads = alloca(THREADS * sizeof(pthread_t));
 	if (strcmp(argv[1], "t") == 0) {
-		int plays = atoi(argv[2]);
+		unsigned long plays = atol(argv[2]);
 		per_thread = plays/THREADS;
 		// thread_create
 		for (int i = 0; i < THREADS; i++) {
@@ -434,7 +520,19 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	if (strcmp(argv[1], "o") == 0) {
+	if (strcmp(argv[1], "r") == 0) {
+		unsigned long plays = atol(argv[2]);
+		per_thread = plays/THREADS;
+		// thread_create
+		for (int i = 0; i < THREADS; i++) {
+			pthread_create( &threads[i], NULL, random_solver_thread, (void*) NULL);
+		}
+		for (int i = 0; i < THREADS; i++) {
+			pthread_join( threads[i], NULL);
+		}
+	}
+
+	if (strcmp(argv[1], "st") == 0) {
 		int plays = atoi(argv[2]);
 		int wins = 0;
 		for (int i = 0; i < plays; i++) {
@@ -443,6 +541,21 @@ int main(int argc, char **argv) {
 				fflush(stdout);
 			}
 			if (train(ROWS,COLS,MINES) == 1)
+				wins++;
+		}
+
+		printf("\nAfter %d was %d wins\n", plays, wins);
+	}
+
+	if (strcmp(argv[1], "sr") == 0) {
+		int plays = atoi(argv[2]);
+		int wins = 0;
+		for (int i = 0; i < plays; i++) {
+			if (i%1000 == 0) {
+				printf("\rTrain %d", i);
+				fflush(stdout);
+			}
+			if (random_train(ROWS,COLS,MINES) == 1)
 				wins++;
 		}
 

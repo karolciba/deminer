@@ -38,56 +38,56 @@ void print_board(board *b, int debug);
 void destroy_board(board *b);
 
 
-/* INLINES */
+/* static inlineS */
 
-inline int flat(board *b, int row, int col) {
+static inline int flat(board *b, int row, int col) {
 	return b->cols*row+col;
 }
 
-inline int up(board *b, int index) {
+static inline int up(board *b, int index) {
 	return index - b->cols;
 }
-inline int down(board *b, int index) {
+static inline int down(board *b, int index) {
 	int i = index + (b->cols);
 	if (i < b->size)
 		return i;
 	else
 		return -1;
 }
-inline int left(board *b, int index) {
+static inline int left(board *b, int index) {
 	if (0 == index % (b->cols))
 		return -1;
 	else
 		return  index - 1;
 }
-inline int right(board *b, int index) {
+static inline int right(board *b, int index) {
 	if (0 == (index + 1) % (b->cols))
 		return -1;
 	else
 		return index + 1;
 }
-inline int left_up(board *b, int index) {
+static inline int left_up(board *b, int index) {
 	int i = left(b, index);
 	if (i > 0)
 		return up(b, i);
 	else
 		return -1;
 }
-inline int left_down(board *b, int index) {
+static inline int left_down(board *b, int index) {
 	int i = left(b, index);
 	if (i > 0)
 		return down(b, i);
 	else
 		return -1;
 }
-inline int right_up(board *b, int index) {
+static inline int right_up(board *b, int index) {
 	int i = right(b, index);
 	if (i > 0)
 		return up(b, i);
 	else
 		return -1;
 }
-inline int right_down(board *b, int index) {
+static inline int right_down(board *b, int index) {
 	int i = right(b, index);
 	if (i > 0)
 		return down(b, i);
@@ -95,7 +95,7 @@ inline int right_down(board *b, int index) {
 		return -1;
 }
 
-inline int field(board *b, int index) {
+static inline int field(board *b, int index) {
 	if (index < 0) {
 		return none;
 	}
