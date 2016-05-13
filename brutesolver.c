@@ -48,7 +48,8 @@
  * Let's use those contemporary multicore processors. Calculation
  * bilions of combinations takes days.
  */
-#define THREADS 3
+#define THREADS 8
+
 /*
  * Global to pass information how many simulation each thread should
  * calculate
@@ -259,7 +260,7 @@ void close_db() {
 /* 
  * Checks probability of mine for given configuration
  */
-unsigned int check(int *window) {
+static inline unsigned int check(int *window) {
 	unsigned int code = hash(window);
 	return db[code].score;
 	/* unsigned int mines = db[code]; */
@@ -267,10 +268,21 @@ unsigned int check(int *window) {
 	/* return ( (float) mines * UINT_MAX ) / (float) tries; */
 }
 
+
+/*
+ * Returns tries count for give state. Used in estimation
+ * of "validity" of score
+ */
+static inline unsigned int tries(int *window) {
+       unsigned int code = hash(window);
+       return db[code].tries;
+}
+
+
 /*
  * Updates probabilites for given configuration
  */
-void update(int *window, int mine) {
+static inline void update(int *window, int mine) {
 	unsigned int code = hash(window);
 
 	if (db[code].mines < UINT_MAX && db[code].tries < UINT_MAX) {
@@ -386,6 +398,64 @@ int random_train(int rows, int cols, int mines) {
 	return ret;
 }
 
+
+/*
+ * Train data model.
+ * Prepare simulation of game using current model database
+ * update probabilities along way.
+ *
+ * Favors solution with low try count.
+ */
+int favor_train(int rows, int cols, int mines) {
+       board *b = init_board(rows,cols,mines);
+
+       /* int *probmap; */
+               /* probmap = malloc(rows*cols,*sizeof(int)); */
+
+       int ret = 0;
+       unsigned int score;
+       unsigned int minimal = UINT_MAX;
+       int minimal_i;
+       int *w = alloca(9 * sizeof(int));
+
+       while (1) {
+               minimal = UINT_MAX;
+               for (int i = 0; i < b->size; i++) {
+                       if (b->visible[i] == 1)
+                               continue;
+                       window(w, b, i);
+                       score = tries(w);
+                       /* only calculate real score for
+                        * tests with more than 1,000,000 tries
+                        * (0.2% mine probability)
+                        * less tries - move favor
+                        * TODO: consider smoother transition
+                        */
+                       if (score > 1000000) score = check(w);
+                       if (score < minimal) {
+                               minimal = score;
+                               minimal_i = i;
+                               /* printf("I: %d, score %d\n",i,score); */
+                       }
+               }
+
+               window(w, b, minimal_i);
+               ret = uncover(b, minimal_i, -1);
+
+               if (ret == -1) {
+                       update(w, 1);
+               }
+               if (ret == 0) {
+                       update(w, 0);
+               }
+
+               if (ret != 0) break;
+       }
+
+       destroy_board(b);
+       return ret;
+}
+
 /*
  * Play game using current database,
  * do not update probabilities
@@ -478,6 +548,29 @@ void *random_solver_thread(void *ignore) {
 	return NULL;
 }
 
+/*
+ * Worker thread for solving simulation in parallel,
+ * using random selection of fields to be uncovered
+ * to avoid bias from low tries.
+ */
+void *favor_solver_thread(void *ignore) {
+	long thread_id = (long)ignore;
+
+	unsigned long plays = per_thread;
+	int wins = 0;
+	for (int i = 0; i < plays; i++) {
+		if (i%1000 == 0) {
+			printf("\r%li Train %d", thread_id, i);
+			fflush(stdout);
+		}
+		if (favor_train(ROWS,COLS,MINES) == 1)
+			wins++;
+	}
+
+	printf("\nAfter %li was %d wins\n", plays, wins);
+	return NULL;
+}
+
 int main(int argc, char **argv) {
 	if (argc < 2) {
 		printf("Usage:\n");
@@ -486,6 +579,8 @@ int main(int argc, char **argv) {
 		printf("one thread train: %s st NUMBER_OF_SIMULATIONS\n", argv[0]);
 		printf("random train: %s r NUMBER_OF_SIMULATIONS\n", argv[0]);
 		printf("one thread random train: %s sr NUMBER_OF_SIMULATIONS\n", argv[0]);
+		printf("favor train: %s f NUMBER_OF_SIMULATIONS\n", argv[0]);
+		printf("one thread favor train: %s sf NUMBER_OF_SIMULATIONS\n", argv[0]);
 		printf("inspect db: %s d\n", argv[0]);
 		exit(1);
 	}
@@ -530,6 +625,18 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	if (strcmp(argv[1], "f") == 0) {
+		unsigned long plays = atol(argv[2]);
+		per_thread = plays/THREADS;
+		// thread_create
+		for (long i = 0; i < THREADS; i++) {
+			pthread_create( &threads[i], NULL, favor_solver_thread, (void*) i);
+		}
+		for (int i = 0; i < THREADS; i++) {
+			pthread_join( threads[i], NULL);
+		}
+	}
+
 	if (strcmp(argv[1], "st") == 0) {
 		int plays = atoi(argv[2]);
 		int wins = 0;
@@ -554,6 +661,21 @@ int main(int argc, char **argv) {
 				fflush(stdout);
 			}
 			if (random_train(ROWS,COLS,MINES) == 1)
+				wins++;
+		}
+
+		printf("\nAfter %d was %d wins\n", plays, wins);
+	}
+
+	if (strcmp(argv[1], "sf") == 0) {
+		int plays = atoi(argv[2]);
+		int wins = 0;
+		for (int i = 0; i < plays; i++) {
+			if (i%1000 == 0) {
+				printf("\rTrain %d", i);
+				fflush(stdout);
+			}
+			if (favor_train(ROWS,COLS,MINES) == 1)
 				wins++;
 		}
 
