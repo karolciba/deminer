@@ -14,6 +14,8 @@ class Field(Enum):
     UNKNOWN = 10
     NONE = 11
 
+field_string_map = dict( [(Field.MINE,'*'), (Field.UNKNOWN,'#'), (Field.NONE, '_')] + [(Field(x),str(x)) for x in range(9)])
+
 def vsum(pos, delta):
     """Sums two vectors in tuple/list format"""
     return (pos[0]+delta[0],pos[1]+delta[1])
@@ -27,15 +29,16 @@ sides       = [         (-1,0),
                (0,-1),          (0,1),
                         (1,0)]
 class Board(object):
-    def __init__(self, rows = 9, cols = 9, mines_count = 20, initialize = True):
+    def __init__(self, rows = 8, cols = 8, mines_count = 10, initialize = True):
         from collections import Counter
-        self.rows = 9
-        self.cols = 9
-        self.mines_count = 10
+        self.rows = rows
+        self.cols = cols
+        self.mines_count = mines_count
         self.board = Counter()
         self.mines = set()
         self.visible = set()
         self.left_fields = rows * cols
+        self.fields_count = rows * cols
         if initialize:
             self.initialize()
 
@@ -48,6 +51,28 @@ class Board(object):
                 if pos[0] >= 0 and pos[0] < rows and pos[1] >= 0 and pos[1] < rows:
                     yield pos
         return gen(positions)
+
+    def window(self,pos,side):
+        """Return list of Field enums for given window"""
+        w = []
+        for x in range(pos[0]-side,pos[0]+side+1):
+            for y in range(pos[1]-side,pos[1]+side+1):
+                test_pos = (x,y)
+                if self._inboard(test_pos):
+                    if not test_pos in self.visible:
+                        w.append(Field.UNKNOWN)
+                    else:
+                        w.append(Field(self.board[test_pos]))
+                else:
+                    w.append(Field.NONE)
+        return w
+    def window_to_string(self, window):
+        l = [ field_string_map[f] for f in window ]
+        return "".join(l)
+
+    def valid_moves(self):
+        possible = ((x,y) for x in range(self.rows) for y in range(self.cols))
+        return [pos for pos in possible if pos not in self.visible]
 
     def initialize(self):
         from random import randint
@@ -81,10 +106,12 @@ class Board(object):
     def uncover(self,pos):
         """Uncovers field, returns tri-state logic: True if won, False if lost, None otherwise"""
         if pos in self.mines:
+            self.visible.add(pos)
             return False
         else:
             self._uncover(pos)
-        if self.left_fields == self.mines_count:
+        # if self.left_fields == self.mines_count:
+        if len(self.visible) == self.fields_count - self.mines_count:
             return True
         return None
 
@@ -114,9 +141,9 @@ class Board(object):
             return True
         else:
             for npos in self.filter([vsum(pos,delta) for delta in neighbours]):
-                print "tested position", npos,
+                # print "tested position", npos,
                 if npos not in self.visible:
-                    print "not visible"
+                    # print "not visible"
                     self._uncover(npos)
 
 
@@ -160,6 +187,6 @@ class Board(object):
                 out += str(self.board[pos])
             out += '\033[0m'
 
-            if pos[1] == 8:
+            if pos[1] == self.cols - 1:
                 out += '\n'
         return out
