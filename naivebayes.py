@@ -37,7 +37,7 @@ def mul(iter):
         m = m * i
     return m
 
-def train(database, window_size = 2):
+def train(database, window_size = 3):
     board = Board()
     ingame = True
 
@@ -114,7 +114,7 @@ def least_prob(db, min = 5):
     return sorted([ (k,v) for k,v in db.iteritems() if v.tries >= min ],key=lambda x: x[1].chance())
 
 def most_prob(db, min = 5):
-    return sorted([ (k,v) for k,v in db.iteritems() if v.tries >= min ],key=lambda x: x[1].chance(), reverse=True)
+    return sorted([ (k,v) for k,v in db.iteritems() if v.tries >= min ], key=lambda x: x[1].risk())
 
 def most_tried(db):
     return sorted([ (k,v) for k,v in db.iteritems() ],key=lambda x: x[1].tries, reverse=True)

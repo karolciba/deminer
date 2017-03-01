@@ -23,9 +23,9 @@ class Record(object):
         self.tries += 1
         return self
     def __str__(self):
-        return "Record {}/{} = {}".format(self.mines,self.tries,self.chance(),self.risk())
+        return "Record {}/{} = {}".format(self.mines,self.tries,self.risk())
     def __repr__(self):
-        return "Record {}/{} = {}".format(self.mines,self.tries,self.chance(),self.rist())
+        return "Record {}/{} = {}".format(self.mines,self.tries,self.risk())
 
 def train(database, window = 2):
     board = Board()
