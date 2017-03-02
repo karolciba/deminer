@@ -8,7 +8,7 @@ from collections import namedtuple
 
 window_size = 3
 neurons_count = 128
-vector_len = len(Field)
+vector_len = 1
 neurons_input_len = (2*window_size+1)**2 * vector_len
 
 # Neural network solver
@@ -110,11 +110,8 @@ vector_map = [
     [0,0,0,0,0,0,0,0,0,0,0,1],
 ]
 def vectorize(window):
-    vector = [ vector_map[v.value] for v in window ]
-    out = []
-    for v in vector:
-        out.extend(v)
-    return np.array(out)
+    vector = [ v.value if v.value < 9 else -v.value + 9 for v in window ]
+    return np.array(vector)
 
 def train(database, window_size = window_size, debug = False):
     board = Board()
@@ -170,14 +167,14 @@ def train(database, window_size = window_size, debug = False):
 def save(database):
     import cPickle
     print "saving db"
-    with open("db_neural.db","w+b") as file:
+    with open("db_neural_linear.db","w+b") as file:
         pickler = cPickle.Pickler(file)
         pickler.dump(database)
 
 def load():
     import cPickle
     print "loading db"
-    with open("db_neural.db","rb") as file:
+    with open("db_neural_linear.db","rb") as file:
         pickler = cPickle.Unpickler(file)
         return pickler.load()
 
